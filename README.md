@@ -4,11 +4,15 @@
 
 
 ## TODO:
-* Dodanie ustawień
+* ### Skopiowanie aplikacji z RPI
+* Wyizololowanie kodu SOME/IP od kodu aplikacji(Moze osobne repo? SOME/IP Python)
+* Dodanie ustawień:
+  * przelicznik dla ADC.
   * adres ip servera,
-  * lokalny adres ip, 
+  * lokalny adres ip (funkcja get_local_ip, zastanowić się nad hostem do którego sie odwoływać w celu ustawienia ip, może pobierać z ustawień systemu?), 
   * czas odswiezania danych na ekranie,
-  * zaokraglenie liczb,
-  * przelicznik dla ADC
-* Zbudowanie aplikacji na windows+linux+android/web(wymagane ustawienia)
+* Zbudowanie aplikacji:
+  * windows
+  * linux
+  * android/web
 * stworzenie github actions które po merge do master zbuduje wersje dla wszystkich systemów
