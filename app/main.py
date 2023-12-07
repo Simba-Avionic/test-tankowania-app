@@ -8,11 +8,15 @@ import time
 import datetime
 import csv
 from sys import exit,argv
+from matplotlib.animation import FuncAnimation
+import matplotlib.pyplot as plt
+import logging
 
 def calculete_pressure(num:float)->float:
     num+=0.008
-    print(num, 61.875*num, (61.875*num)-23.75)
     return (61.875*num)-23.75
+
+
 
 
 
@@ -25,13 +29,32 @@ def get_local_ip():
         s.close()
         return local_ip
     except Exception as e:
-        print(f"Błąd podczas uzyskiwania lokalnego adresu IP: {e}")
+        logging.warning(f"Błąd podczas uzyskiwania lokalnego adresu IP: {e}")
         return None
 
-H_HOST = "192.168.11.100" # RPI HOST
+H_HOST = "127.0.0.1" # RPI HOST
 H_PORT = 10000 # RPI PORT
 R_PORT = 10101 # THIS APP PORT
-R_HOST = "192.168.11.101" # THIS APP HOST
+R_HOST = "127.0.0.1" # THIS APP HOST
+
+class PlotData:
+    def __init__(self):
+        self.pressureData=[0]
+        self.pressureX=[0]
+        self.delpressureData=[0]
+        self.delpressX=[0]
+        self.tensoX=[0]
+        self.tensoData=[0]
+        self.TgX=[0]
+        self.TsX=[0]
+        self.TdX=[0]
+        self.TgData=[0]
+        self.TsData=[0]
+        self.TdData=[0]
+        self.TrozX=[0]
+        self.TRozData=[0]
+
+
 
 run=True
 
@@ -54,6 +77,8 @@ class Data:
 
 displayed_data=Data()
 to_save_data=Data()
+
+plotData=PlotData()
 
 save_is_run=False
 stop_saving=Event()
@@ -82,12 +107,51 @@ def startSave():
             to_save_data.tenso=None   
 
 
+def plotThread():
+    global plotData
+    global showPlot
+    how=8000
 
+    def update(frame):
+
+        ax[0,0].clear()
+        ax[1,0].clear()
+        ax[1,1].clear()
+        ax[0,1].clear()
+
+        
+        ax[0,0].plot(plotData.pressureX[-how:],plotData.pressureData[-how:])
+        ax[0,0].set_title("Ciśnienie")
+
+        ax[1,0].plot(plotData.delpressX,plotData.delpressureData)
+        ax[1,0].set_title("Różnica ciśnień")
+
+        ax[0,1].plot(plotData.tensoX,plotData.tensoData)
+        ax[0,1].set_title("Tenso")
+
+        ax[1,1].plot(plotData.TgX,plotData.TgData,label="Tg")
+        ax[1,1].plot(plotData.TsX,plotData.TsData,label="Ts")
+        ax[1,1].plot(plotData.TdX,plotData.TdData,label="Td")
+        ax[1,1].plot(plotData.TrozX,plotData.TRozData,label="Ciś")
+
+        ax[1,1].set_title("Temperatury")
+
+        ax[1,1].legend()
+
+
+
+    fig,ax=plt.subplots(2,2)
+    ani=FuncAnimation(fig,update,interval=2000,save_count=1000,cache_frame_data=True)
+    plt.show()
 
 def receiverThreadFunc():
+    global plotData
     run=True
     with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
-        sock.bind(("0.0.0.0",R_PORT))
+        try:
+            sock.bind(("0.0.0.0",R_PORT))
+        except:
+            logging.critical("Zajęty port")
         try:
             while run:
                 data=sock.recv(150)
@@ -97,35 +161,52 @@ def receiverThreadFunc():
                 someipHeader.read(data)
                 payload=data[16:]
                 if hex(someipHeader.methode_id)=="0x8001":
-                    displayed_data.pressure=round(struct.unpack('f',payload)[0],6)
-                    to_save_data.pressure=struct.unpack('f',payload)[0]
+                    data=struct.unpack('f',payload)[0]
+                    displayed_data.pressure=round(data,6)
+                    to_save_data.pressure=data
+                    plotData.delpressureData.append(data)
+                    plotData.delpressX.append(plotData.delpressX[-1]+1)
                 elif hex(someipHeader.methode_id)=="0x8002":
-                    displayed_data.temp=round(struct.unpack('f',payload)[0],6)
-                    to_save_data.temp=struct.unpack('f',payload)[0]
+                    data=struct.unpack('f',payload)[0]
+                    displayed_data.temp=round(data,6)
+                    to_save_data.temp=data
+                    plotData.TRozData.append(data)
+                    plotData.TrozX.append(plotData.TrozX[-1]+1)
                 elif hex(someipHeader.methode_id)=="0x8003":
                     displayed_data.A0=round(struct.unpack('f',payload)[0],6)
                     to_save_data.A0=struct.unpack('f',payload)[0]
                 elif hex(someipHeader.methode_id)=="0x8004":
                     displayed_data.A1=round(calculete_pressure(struct.unpack('f',payload)[0]),6)
                     to_save_data.A1=struct.unpack('f',payload)[0]
+                    plotData.pressureData.append(calculete_pressure(struct.unpack('f',payload)[0]))
+                    plotData.pressureX.append(plotData.pressureX[-1]+1)
                 elif hex(someipHeader.methode_id)=="0x8005":
                     displayed_data.A2=round(struct.unpack('f',payload)[0],6)
                     to_save_data.A2=struct.unpack('f',payload)[0]
                 elif hex(someipHeader.methode_id)=="0x8006":
-                    displayed_data.tenso=round(struct.unpack('f',payload)[0],6)
-                    to_save_data.tenso=struct.unpack('f',payload)[0]
+                    data=struct.unpack('f',payload)[0]
+                    displayed_data.tenso=round(data,6)
+                    to_save_data.tenso=data
+                    plotData.tensoData.append(data)
+                    plotData.tensoX.append(plotData.tensoX[-1]+1)
                 elif hex(someipHeader.methode_id)=="0x8007":
-                    sensor=payload[4:].decode("UTF-8")
+                    data=struct.unpack('f',payload[:4])[0]
+                    sensor=payload[4:].decode("UTF-8",errors="ignore")
                     if sensor=='28-062018f00883':
-                        displayed_data.Tg=round(struct.unpack('f',payload[:4])[0],2)
-                        to_save_data.Tg=struct.unpack('f',payload[:4])[0]
+                        displayed_data.Tg=round(data,2)
+                        to_save_data.Tg=data
+                        plotData.TgData.append(data)
+                        plotData.TgX.append(plotData.TgX[-1]+1)
                     elif sensor=='28-3c29e381356d':
-                        displayed_data.Ts=round(struct.unpack('f',payload[:4])[0],2)
-                        to_save_data.Ts=struct.unpack('f',payload[:4])[0]
+                        displayed_data.Ts=round(data,2)
+                        to_save_data.Ts=data
+                        plotData.TsData.append(data)
+                        plotData.TsX.append(plotData.TsX[-1]+1)
                     elif sensor=='28-3c01e076e761':
-                        displayed_data.Td=round(struct.unpack('f',payload[:4])[0],2)
-                        to_save_data.Td=struct.unpack('f',payload[:4])[0]
-
+                        displayed_data.Td=round(data,2)
+                        to_save_data.Td=data
+                        plotData.TdData.append(data)
+                        plotData.TdX.append(plotData.TdX[-1]+1)
         except KeyboardInterrupt:
             run=False
             time.sleep(0.1)
@@ -159,20 +240,24 @@ def stop_thread():
         save_is_run=False
 
 def sendTaraThreadFunc(e):
-    th=Thread(target=lambda:sendSomeIPMsg(0x01,0x02,b'',H_HOST,H_PORT))
+    global displayed_data
+    th=Thread(target=lambda:sendSomeIPMsg(0x01,0x02,struct.pack('f',displayed_data.tenso),H_HOST,H_PORT))
     th.start()
 
+
 receiverThread=Thread(target=receiverThreadFunc,daemon=True)
+plot_thread=Thread(target=plotThread,daemon=True)
 
 def main(page:Page):
     global H_HOST
     if len(argv)>1:
         H_HOST=argv[1]
-    page.window_width=350
+    page.window_width=400
     page.window_height=500
     try:
         global run
         receiverThread.start()
+        plot_thread.start()
         def sendInitMsg():
             R_PORT_bytes=R_PORT.to_bytes(2,byteorder='big')
             R_HOST_bytes=socket.inet_aton(R_HOST)
@@ -182,7 +267,6 @@ def main(page:Page):
 
         page.title="Engine test app"
         page.vertical_alignment="center"
-
         sendInitMsg()
         while run:
             page.add(flet.DataTable(
