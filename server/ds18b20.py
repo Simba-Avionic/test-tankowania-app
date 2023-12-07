@@ -12,7 +12,7 @@ os.system('modprobe w1-therm')
 
 class DS18B20(threading.Thread):
     def __init__(self,temp_queue):
-        threading.Thread.__init__(self)
+        threading.Thread.__init__(self,daemon=True)
         self.device_file=[
              '/sys/bus/w1/devices/28-062018f00883',
              '/sys/bus/w1/devices/28-3c29e381356d',
@@ -47,15 +47,16 @@ class DS18B20(threading.Thread):
             temp_c = float(temp_string) / 1000.0
             return id,temp_c
     
-kolejka=queue.Queue(150)
 
-w1=DS18B20("123",kolejka)
-w1.start()
-while True:
-    try:
-        data = kolejka.get_nowait()
-        print("Odebrano dane:", data)
-    except queue.Empty:
-        pass
-    if not w1.is_alive() and kolejka.empty():
-        break
+if __name__=="__main__":
+    kolejka=queue.Queue(150)
+    w1=DS18B20(kolejka)
+    w1.start()
+    while True:
+        try:
+            data = kolejka.get_nowait()
+            print("Odebrano dane:", data)
+        except queue.Empty:
+            pass
+        if not w1.is_alive() and kolejka.empty():
+            break

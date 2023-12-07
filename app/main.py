@@ -31,7 +31,7 @@ def get_local_ip():
 H_HOST = "192.168.11.100" # RPI HOST
 H_PORT = 10000 # RPI PORT
 R_PORT = 10101 # THIS APP PORT
-R_HOST = "192.168.11.100" # THIS APP HOST
+R_HOST = "192.168.11.101" # THIS APP HOST
 
 run=True
 
@@ -114,17 +114,17 @@ def receiverThreadFunc():
                 elif hex(someipHeader.methode_id)=="0x8006":
                     displayed_data.tenso=round(struct.unpack('f',payload)[0],6)
                     to_save_data.tenso=struct.unpack('f',payload)[0]
-                elif hex(someipHeader.methode_id)=="0x007":
-                    sensor=payload[:20].decode("UTF-8")
-                    if sensor=='/sys/bus/w1/devices/28-062018f00883':
-                        displayed_data.Tg=round(struct.unpack('f',payload[16:20]),4)
-                        to_save_data.Tg=struct.unpack('f',payload[16:20])
-                    elif sensor=='/sys/bus/w1/devices/28-3c29e381356d':
-                        displayed_data.Ts=round(struct.unpack('f',payload[16:20]),4)
-                        to_save_data.Ts=struct.unpack('f',payload[16:20])
-                    elif sensor=='/sys/bus/w1/devices/28-3c01e076e761':
-                        displayed_data.Td=round(struct.unpack('f',payload[16:20]),4)
-                        to_save_data.Td=struct.unpack('f',payload[16:20])
+                elif hex(someipHeader.methode_id)=="0x8007":
+                    sensor=payload[4:].decode("UTF-8")
+                    if sensor=='28-062018f00883':
+                        displayed_data.Tg=round(struct.unpack('f',payload[:4])[0],2)
+                        to_save_data.Tg=struct.unpack('f',payload[:4])[0]
+                    elif sensor=='28-3c29e381356d':
+                        displayed_data.Ts=round(struct.unpack('f',payload[:4])[0],2)
+                        to_save_data.Ts=struct.unpack('f',payload[:4])[0]
+                    elif sensor=='28-3c01e076e761':
+                        displayed_data.Td=round(struct.unpack('f',payload[:4])[0],2)
+                        to_save_data.Td=struct.unpack('f',payload[:4])[0]
 
         except KeyboardInterrupt:
             run=False
