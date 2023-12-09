@@ -1,4 +1,4 @@
-from ctypes import sizeof,c_uint16,c_uint8,c_uint32,c_uint64
+from ctypes import sizeof,c_uint16,c_uint8,c_uint32
 
 class SomeIPHeader:
     def __str__(self) -> str:
