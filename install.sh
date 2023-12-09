@@ -1,3 +1,3 @@
 #!/bin/bash
 
-pip install curses
+pip install flet matplotlib 

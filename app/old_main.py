@@ -121,18 +121,18 @@ def plotThread():
 
         
         ax[0,0].plot(plotData.pressureX[-how:],plotData.pressureData[-how:])
-        ax[0,0].set_title("Ciśnienie")
+        ax[0,0].set_title("Pressure")
 
         ax[1,0].plot(plotData.delpressX,plotData.delpressureData)
-        ax[1,0].set_title("Różnica ciśnień")
+        ax[1,0].set_title(r'$\Delta$ Pressure')
 
         ax[0,1].plot(plotData.tensoX,plotData.tensoData)
         ax[0,1].set_title("Tenso")
 
-        ax[1,1].plot(plotData.TgX,plotData.TgData,label="Tg")
-        ax[1,1].plot(plotData.TsX,plotData.TsData,label="Ts")
-        ax[1,1].plot(plotData.TdX,plotData.TdData,label="Td")
-        ax[1,1].plot(plotData.TrozX,plotData.TRozData,label="Ciś")
+        ax[1,1].plot(plotData.TgX,plotData.TgData,label=r'$T_{\mathrm{góra}}$')
+        ax[1,1].plot(plotData.TsX,plotData.TsData,label=r'$T_{\mathrm{środek}}$')
+        ax[1,1].plot(plotData.TdX,plotData.TdData,label=r'$T_{\mathrm{dół}}$')
+        ax[1,1].plot(plotData.TrozX,plotData.TRozData,label="Ciśnienie")
 
         ax[1,1].set_title("Temperatury")
 
@@ -140,7 +140,7 @@ def plotThread():
 
 
 
-    fig,ax=plt.subplots(2,2)
+    fig,ax=plt.subplots(2,2,figsize=(10, 8))
     ani=FuncAnimation(fig,update,interval=2000,save_count=1000,cache_frame_data=True)
     plt.show()
 
@@ -244,6 +244,12 @@ def sendTaraThreadFunc(e):
     th=Thread(target=lambda:sendSomeIPMsg(0x01,0x02,struct.pack('f',displayed_data.tenso),H_HOST,H_PORT))
     th.start()
 
+def sendInitMsg(customerHost,customerPort,myHost,myPort):
+    R_PORT_bytes=myPort.to_bytes(2,byteorder='big')
+    R_HOST_bytes=socket.inet_aton(myHost)
+    init_payload=R_HOST_bytes+R_PORT_bytes
+    sendSomeIPMsg(0x01,0x01,init_payload,customerHost,customerPort)
+
 
 receiverThread=Thread(target=receiverThreadFunc,daemon=True)
 plot_thread=Thread(target=plotThread,daemon=True)
@@ -258,16 +264,10 @@ def main(page:Page):
         global run
         receiverThread.start()
         plot_thread.start()
-        def sendInitMsg():
-            R_PORT_bytes=R_PORT.to_bytes(2,byteorder='big')
-            R_HOST_bytes=socket.inet_aton(R_HOST)
-            init_payload=R_HOST_bytes+R_PORT_bytes
-            sendSomeIPMsg(0x01,0x01,init_payload,H_HOST,H_PORT)
-
 
         page.title="Engine test app"
         page.vertical_alignment="center"
-        sendInitMsg()
+        sendInitMsg(R_HOST,R_PORT,H_HOST,H_PORT)
         while run:
             page.add(flet.DataTable(
                 columns=[
