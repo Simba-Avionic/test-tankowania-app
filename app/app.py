@@ -6,22 +6,148 @@ import csv
 import threading
 from config import Config
 import flet
-from flet import Page,Row,TextButton
+from flet import Page,Row,TextButton,TextField
 import time
 import logging
 from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
 from data import Data,PlotData
+import asyncio
+
+
+class View(flet.UserControl):
+    def __init__(self,displayed_data:Data,my_config:Config,start_func,stop_func):
+        self.displayed_data=displayed_data
+        self.my_config=my_config
+        self.sock=SomeIpSocket("button_socket")
+        self._run_thread=start_func
+        self._stop_thread=stop_func
+        super().__init__()
+
+    async def did_mount_async(self):
+        self.running=True
+        asyncio.create_task(self.update_timer())
+
+    async def will_unmount_async(self):
+        self.running=False
+
+    async def handle_button_click_Vo(self):
+        await self._button_click_Vo()
+    async def handle_button_click_Vc(self):
+        await self._button_click_Vc()
+
+
+    async def _button_click_Vc(self):
+        self.my_config.open_value=int(self.Vo.value)
+        self.my_config.close_value=int(self.Vc.value)
+        self.sock.sendSomeIPMsg(0x01,0x03,int.to_bytes(self.my_config.servo_pin)+int.to_bytes(self.my_config.close_value),self.my_config.RPI_HOST,self.my_config.RPI_PORT)
+        await asyncio.sleep(0.001)
+    async def _button_click_Vo(self):
+        self.my_config.open_value=int(self.Vo.value)
+        self.my_config.close_value=int(self.Vc.value)
+        self.sock.sendSomeIPMsg(0x01,0x03,int.to_bytes(self.my_config.servo_pin)+int.to_bytes(self.my_config.open_value),self.my_config.RPI_HOST,self.my_config.RPI_PORT)
+        await asyncio.sleep(0.001)
+
+    async def update_timer(self):
+        while self.running:
+            self.press_view.value=self.displayed_data.pressure
+            self.temp_view.value=self.displayed_data.temp
+            self.A1_view.value=self.displayed_data.A1
+            self.tenso_view.value=self.displayed_data.tenso
+            self.tg_view.value=self.displayed_data.Tg
+            self.ts_view.value=self.displayed_data.Ts
+            self.td_view.value=self.displayed_data.Td
+            await self.update_async()
+            await asyncio.sleep(1)
+
+    def build(self):
+        self.press_view=flet.Text()
+        self.temp_view=flet.Text()
+        self.A1_view=flet.Text()
+        self.tenso_view=flet.Text()
+        self.tg_view=flet.Text()
+        self.ts_view=flet.Text()
+        self.td_view=flet.Text()
+        self.Vo=TextField(flet.Text("Vo"),width=60,value=self.my_config.open_value)
+        self.Vc=TextField(flet.Text("Vc"),width=60,value=self.my_config.close_value)
+
+        self.view=flet.Column([flet.DataTable(
+                    columns=[
+                        flet.DataColumn(flet.Text("name")),
+                        flet.DataColumn(flet.Text("value"),numeric=True)
+                    ],
+                    rows=[
+                        flet.DataRow(
+                            cells=[
+                                flet.DataCell(flet.Text("pressure")),
+                                flet.DataCell(self.press_view)
+                            ]
+                        ),
+                        flet.DataRow(
+                            cells=[
+                                flet.DataCell(flet.Text("temp")),
+                                flet.DataCell(self.temp_view)
+                            ]
+                        ),
+                        flet.DataRow(
+                            cells=[
+                                flet.DataCell(flet.Text("A1")),
+                                flet.DataCell(self.A1_view)
+                            ]
+                        ),
+                        flet.DataRow(
+                            cells=[
+                                flet.DataCell(flet.Text("tenso")),
+                                flet.DataCell(self.tenso_view)
+                            ]
+                        ),
+                        flet.DataRow(
+                            cells=[
+                                flet.DataCell(flet.Text("temp góra")),
+                                flet.DataCell(self.tg_view)
+                            ]
+                        ),
+                        flet.DataRow(
+                            cells=[
+                                flet.DataCell(flet.Text("temp środek")),
+                                flet.DataCell( self.ts_view)
+                            ]
+                        ),
+                        flet.DataRow(
+                            cells=[
+                                flet.DataCell(flet.Text("tmp dół")),
+                                flet.DataCell(self.td_view)
+                            ]
+                        )
+                    ]
+                ),
+                Row([
+                    TextButton("Tara",on_click=lambda e:self.sock.sendSomeIPMsg(0x01,0x01,struct.pack('f',self.displayed_data.tenso),
+                            self.my_config.RPI_HOST,self.my_config.RPI_PORT)),
+                    TextButton("Start Save",on_click=lambda e:self._run_thread()),
+                    TextButton("Stop Save",on_click=lambda e:self._stop_thread()),
+                ]),
+                Row([
+                    self.Vo,
+                    TextButton("Open valve",on_click=lambda e: asyncio.create_task(self.handle_button_click_Vo())),
+                    self.Vc,
+                    TextButton("Close valve",on_click=lambda e: asyncio.create_task(self.handle_button_click_Vc()))
+
+                ])
+                ])
+
+        return self.view
+        
+
 
 class MainApp(SomeIpSocket):
-    def __init__(self,name,log_lvl,view_plot_time=10000):
+    def __init__(self,name,view_plot_time=10000,config=Config("127.0.0.1",10000,"127.0.0.1",10101)):
         self.viewTime=view_plot_time
 
-        logging.basicConfig(level=log_lvl)
+        logging.basicConfig(level=config.log_lvl)
         logging.getLogger("flet_core").setLevel(logging.CRITICAL)
         super().__init__(name)
-        self.config=Config()
-        self.config=Config("127.0.0.1",10000,"127.0.0.1",10101) # comment this to real use
+        self.config=config
         
         self.displayed_data=Data()
 
@@ -35,11 +161,9 @@ class MainApp(SomeIpSocket):
         self.saveThread=threading.Thread(target=self._startSaveFunc,daemon=True)
         self.mainReceiver=threading.Thread(target=self.startReceiver,args=(self.config.OWN_PORT,self._MainreceiverThreadFunc),daemon=True)
         self.plotReceiverThread=threading.Thread(target=self.startReceiver,args=(self.config.OWN_PORT+1,self._PlotreceiverThreadFunc),daemon=True)
-        self.fletDisplay=threading.Thread(target=self._fletDisplay_thread,daemon=True)
         self.plotThread=threading.Thread(target=self._plotFunc,daemon=True)
 
         
-        self.fletDisplay.start()
         self.mainReceiver.start()
         self.plotThread.start()
         self.plotReceiverThread.start()
@@ -47,8 +171,9 @@ class MainApp(SomeIpSocket):
         self._sendInitMsg(self.config.RPI_HOST,self.config.RPI_PORT,self.config.OWN_HOST,self.config.OWN_PORT+1)
         self._sendInitMsg(self.config.RPI_HOST,self.config.RPI_PORT,self.config.OWN_HOST,self.config.OWN_PORT)
 
+        self._fletDisplay_thread()
+
         self.mainReceiver.join()
-        self.fletDisplay.join()
         self.plotThread.join()
         self.plotReceiverThread.join()
 
@@ -66,74 +191,11 @@ class MainApp(SomeIpSocket):
 
     def _fletDisplay_thread(self):
         
-        def main(page:Page):
-            page.window_width=self.config.window_width
-            page.window_height=self.config.window_height
-            page.title="Engine test app"
-            page.vertical_alignment="center"
-            while True:
-                page.add(flet.DataTable(
-                    columns=[
-                        flet.DataColumn(flet.Text("name")),
-                        flet.DataColumn(flet.Text("value"),numeric=True)
-                    ],
-                    rows=[
-                        flet.DataRow(
-                            cells=[
-                                flet.DataCell(flet.Text("pressure")),
-                                flet.DataCell(flet.Text(self.displayed_data.pressure))
-                            ]
-                        ),
-                        flet.DataRow(
-                            cells=[
-                                flet.DataCell(flet.Text("temp")),
-                                flet.DataCell(flet.Text(self.displayed_data.temp))
-                            ]
-                        ),
-                        flet.DataRow(
-                            cells=[
-                                flet.DataCell(flet.Text("A1")),
-                                flet.DataCell(flet.Text(self.displayed_data.A1))
-                            ]
-                        ),
-                        flet.DataRow(
-                            cells=[
-                                flet.DataCell(flet.Text("tenso")),
-                                flet.DataCell(flet.Text(self.displayed_data.tenso))
-                            ]
-                        ),
-                                            flet.DataRow(
-                            cells=[
-                                flet.DataCell(flet.Text("temp góra")),
-                                flet.DataCell(flet.Text(self.displayed_data.Tg))
-                            ]
-                        ),
-                        flet.DataRow(
-                            cells=[
-                                flet.DataCell(flet.Text("temp środek")),
-                                flet.DataCell(flet.Text(self.displayed_data.Ts))
-                            ]
-                        ),
-                        flet.DataRow(
-                            cells=[
-                                flet.DataCell(flet.Text("tmp dół")),
-                                flet.DataCell(flet.Text(self.displayed_data.Td))
-                            ]
-                        )
-                    ]
-                ))
-                page.add(
-                Row([
-                    TextButton("Tara",on_click=lambda e:self.sendSomeIPMsg(0x01,0x01,struct.pack('f',self.displayed_data.tenso),
-                            self.config.RPI_HOST,self.config.RPI_PORT)),
-                    TextButton("Start Save",on_click=lambda e:self._run_thread()),
-                    TextButton("Stop Save",on_click=lambda e:self._stop_thread())
-                ])
-            )
-                time.sleep(1)
-                page.clean()
-
-        flet.app(target=main)
+        async def main(page:Page):
+            page.window_width=400
+            page.window_height=550
+            await page.add_async(View(self.displayed_data,self.config,self._run_thread,self._stop_thread))
+        flet.app(main)
 
     def __calculete_pressure(self,num:float)->float:
         num+=0.008

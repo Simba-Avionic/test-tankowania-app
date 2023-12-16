@@ -3,6 +3,8 @@ import glob
 import time
 import threading
 import queue
+from someip import SomeIPHeader
+import struct
 
 os.system('modprobe w1-gpio')
 os.system('modprobe w1-therm')
@@ -11,20 +13,21 @@ os.system('modprobe w1-therm')
 
 
 class DS18B20(threading.Thread):
-    def __init__(self,temp_queue):
+    def __init__(self,queue):
         threading.Thread.__init__(self,daemon=True)
         self.device_file=[
              '/sys/bus/w1/devices/28-062018f00883',
              '/sys/bus/w1/devices/28-3c29e381356d',
              '/sys/bus/w1/devices/28-3c01e076e761'
              ]
-        self.queue:queue.Queue=temp_queue
+        self.queue:queue.Queue=queue
 
     def run(self):
+        someiph=SomeIPHeader(0x02,0x8007,0x02)
         while True:
             for device in self.device_file:
-                data=self.read_id_and_temp(device)
-                self.queue.put(data,timeout=0.5)
+                id,temp=self.read_id_and_temp(device)
+                self.queue.put_nowait(b''.join(someiph.GetSomeIPDataPayload(struct.pack("f",temp)+id.encode("UTF-8"))))
     
     def __read_temp_raw(self,device_path):
         f = open(device_path+"/w1_slave", 'r')
