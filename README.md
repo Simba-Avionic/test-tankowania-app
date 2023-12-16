@@ -12,3 +12,6 @@
   * przelicznik dla ADC
 * Zbudowanie aplikacji na windows+linux+android/web(wymagane ustawienia)
 * stworzenie github actions które po merge do master zbuduje wersje dla wszystkich systemów
+
+## DONE:
+* Dodanie wykresów odbieranych danych
