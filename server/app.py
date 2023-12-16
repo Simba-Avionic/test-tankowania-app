@@ -12,6 +12,7 @@ import sys
 import RPi.GPIO as GPIO
 from hx711 import HX711
 from ds18b20 import DS18B20
+from servo import Servo
 # ADAPTER_IP = '192.168.11.101'
 LOCAL_IP = '0.0.0.0'
 # PORT = 10000
@@ -21,6 +22,9 @@ global flag
 flag = True
 global client_list
 client_list = []
+servo_list:list(Servo)=[]
+
+send_queue=Queue()
 
 tenso_val = 0
 
@@ -32,8 +36,14 @@ class client:
         self.ip = ip
         self.port = port
 
+def tx_communication_thread(send_queue:Queue):
+    with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
+        while True:
+            sendEvent(send_queue.get(True,0.01))
+
+
 def rx_comunication_thread():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM,socket.IPPROTO_UDP)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind((LOCAL_IP, PORTRX))
     # wrong: mreq = struct.pack("sl", socket.inet_aton("224.51.105.104"), socket.INADDR_ANY)
@@ -70,6 +80,18 @@ def rx_comunication_thread():
             referenceUnit = val
             global tar_flag
             tar_flag = True
+        elif(someiph.service_id== 0x01 and someiph.methode_id ==0x03):
+            payload=hex[16:]
+            pin=int.from_bytes(payload[0:1],byteorder="big",signed=False)
+            value=int.from_bytes(payload[1:],byteorder="big",signed=False)
+            obj=next((obj for obj in servo_list if obj.pin == pin),None)
+            if obj is None:
+                servo_list.append(Servo(pin,value))
+            else:
+                obj.changeValue(value)
+
+        
+
 
 def sendEvent(data:bytes):
     sock = socket.socket(socket.AF_INET,  # Internet
@@ -124,35 +146,27 @@ def volt_convert(raw,scale):
     return raw*scale/1000.0
 def loop():
     rs_sensor = Sensor("/dev/ttyS0",9600)
-    temp_queue=Queue()
-    t1=DS18B20(temp_queue)
+    t1=DS18B20(send_queue)
     t1.start()
     while True:
         header = SomeIPHeader(0x01,0x8001,0x02)
         
         val = rs_sensor.ReadP1()
-        sendEvent(b''.join(header.GetSomeIPDataPayload(struct.pack("f", val))))
+        send_queue.put_nowait(b''.join(header.GetSomeIPDataPayload(struct.pack("f", val))))
         val = rs_sensor.ReadTemp()
-        
         header = SomeIPHeader(0x01,0x8002,0x02)
-        sendEvent(b''.join(header.GetSomeIPDataPayload(struct.pack("f", val))))
+        send_queue.put_nowait(b''.join(header.GetSomeIPDataPayload(struct.pack("f", val))))
         header = SomeIPHeader(0x01,0x8003,0x02)
-        sendEvent(b''.join(header.GetSomeIPDataPayload(struct.pack("f", read_Volt(0)))))
+        send_queue.put_nowait(b''.join(header.GetSomeIPDataPayload(struct.pack("f", read_Volt(0)))))
         header = SomeIPHeader(0x01,0x8004,0x02)
-        sendEvent(b''.join(header.GetSomeIPDataPayload(struct.pack("f", read_Volt(1)))))
+        send_queue.put_nowait(b''.join(header.GetSomeIPDataPayload(struct.pack("f", read_Volt(1)))))
         header = SomeIPHeader(0x01,0x8005,0x02)
-        sendEvent(b''.join(header.GetSomeIPDataPayload(struct.pack("f", read_Volt(2)))))
+        send_queue.put_nowait(b''.join(header.GetSomeIPDataPayload(struct.pack("f", read_Volt(2)))))
         header = SomeIPHeader(0x01,0x8006,0x02)
         global tenso_val
-        sendEvent(b''.join(header.GetSomeIPDataPayload(struct.pack("f", tenso_val))))
+        send_queue.put_nowait(b''.join(header.GetSomeIPDataPayload(struct.pack("f", tenso_val))))
         header=SomeIPHeader(0x01,0x8007,0x02)
-        for _ in range(0,3):
-            try:
-                id,temp=temp_queue.get_nowait()
-                sendEvent(b''.join(header.GetSomeIPDataPayload(struct.pack("f",temp)+id.encode('UTF-8'))))
-
-            except Empty:
-                pass
+        sendmsg=0
 
 
 def main():
@@ -160,6 +174,8 @@ def main():
     t2.start()
     t3 = Thread(target=hx711_loop,daemon=True)
     t3.start()
+    tx_thread=Thread(target=tx_communication_thread,daemon=True,args=[send_queue])
+    tx_thread.start()
     loop()
 
 if __name__ == "__main__":
