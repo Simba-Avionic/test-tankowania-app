@@ -9,6 +9,7 @@ first=True
 HOST="127.0.0.1"
 PORT=10101
 
+"""
 with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
     sock.bind(("0.0.0.0",10000))
     while first:
@@ -20,7 +21,7 @@ with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
         print(HOST)
         print(PORT)
         first=False
-
+"""
 
 with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
     while True:
